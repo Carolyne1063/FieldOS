@@ -1,6 +1,6 @@
 export const USER_ROLES = [
   'super_admin',
-  'owner',
+  'org_admin',
   'dispatcher',
   'supervisor',
   'technician',

@@ -1,5 +1,5 @@
 {
-  "id": "4e844484-efec-4356-96ef-dc00bdc745b6",
+  "id": "a0b5a2dd-98b6-4ba5-a06c-74efc351b383",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -346,7 +346,7 @@
       "schema": "public",
       "values": [
         "super_admin",
-        "owner",
+        "org_admin",
         "dispatcher",
         "supervisor",
         "technician",
