@@ -16,6 +16,13 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const signupSchema = z.object({
+  organizationName: z.string().trim().min(2).max(100),
+  name: z.string().trim().min(2).max(100),
+  email: z.string().email(),
+  password: z.string().min(8).max(72),
+});
+
 const ACCESS_COOKIE = 'fieldos_access';
 const REFRESH_COOKIE = 'fieldos_refresh';
 
@@ -32,6 +39,29 @@ function cookieOptions(maxAgeMs: number, path: string) {
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+    @Post('signup')
+  @HttpCode(201)
+  async signup(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parsed = signupSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid request body',
+        issues: parsed.error.issues.map((i) => ({
+          field: i.path.join('.'),
+          message: i.message,
+        })),
+      });
+    }
+
+    const { accessToken, refreshToken, user } =
+      await this.auth.signupOrganization(parsed.data);
+    this.setCookies(res, accessToken, refreshToken);
+    return { user };
+  }
 
   @Post('login')
   @HttpCode(200)

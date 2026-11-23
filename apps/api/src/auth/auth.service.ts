@@ -1,10 +1,15 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { DRIZZLE, type Database } from '../db/db.module.js';
-import { refreshTokens, users } from '../db/schema.js';
+import { organizations, refreshTokens, users } from '../db/schema.js';
 
 type User = typeof users.$inferSelect;
 
@@ -16,12 +21,66 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function slugify(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return slug || 'company';
+}
+
 @Injectable()
 export class AuthService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly jwt: JwtService,
   ) {}
+
+  async signupOrganization(input: {
+    organizationName: string;
+    name: string;
+    email: string;
+    password: string;
+  }) {
+    const email = input.email.toLowerCase();
+
+    const [existing] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    if (existing) {
+      throw new ConflictException('An account with this email already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 10);
+    const slug = await this.uniqueSlug(input.organizationName);
+
+    const user = await this.db.transaction(async (tx) => {
+      const [org] = await tx
+        .insert(organizations)
+        .values({ name: input.organizationName, slug })
+        .returning();
+      if (!org) throw new Error('Could not create organization');
+
+      const [created] = await tx
+        .insert(users)
+        .values({
+          organizationId: org.id,
+          name: input.name,
+          email,
+          passwordHash,
+          role: 'org_admin',
+        })
+        .returning();
+      if (!created) throw new Error('Could not create user');
+
+      return created;
+    });
+
+    return this.issueTokens(user);
+  }
 
   async login(email: string, password: string) {
     const [user] = await this.db
@@ -78,6 +137,24 @@ export class AuthService {
       .update(refreshTokens)
       .set({ revokedAt: new Date() })
       .where(eq(refreshTokens.tokenHash, hashToken(rawToken)));
+  }
+
+  private async uniqueSlug(name: string): Promise<string> {
+    const base = slugify(name);
+    let slug = base;
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const [taken] = await this.db
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(eq(organizations.slug, slug))
+        .limit(1);
+      if (!taken) return slug;
+      slug = `${base}-${randomBytes(2).toString('hex')}`;
+    }
+    throw new ConflictException(
+      'Could not generate a unique company address, try a different name',
+    );
   }
 
   private async issueTokens(user: User) {
