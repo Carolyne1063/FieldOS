@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   Post,
   Req,
@@ -10,6 +11,8 @@ import {
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { AuthService } from './auth.service.js';
+import type { AuthUser } from './auth.types.js';
+import { CurrentUser, Public, Roles } from './decorators.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -40,7 +43,8 @@ function cookieOptions(maxAgeMs: number, path: string) {
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-    @Post('signup')
+  @Public()
+  @Post('signup')
   @HttpCode(201)
   async signup(
     @Body() body: unknown,
@@ -63,6 +67,7 @@ export class AuthController {
     return { user };
   }
 
+  @Public()
   @Post('login')
   @HttpCode(200)
   async login(
@@ -80,6 +85,7 @@ export class AuthController {
     return { user };
   }
 
+  @Public()
   @Post('refresh')
   @HttpCode(200)
   async refresh(
@@ -94,6 +100,7 @@ export class AuthController {
     return { user };
   }
 
+  @Public()
   @Post('logout')
   @HttpCode(200)
   async logout(
@@ -106,6 +113,18 @@ export class AuthController {
     await this.auth.logout(raw);
     res.clearCookie(ACCESS_COOKIE, { path: '/' });
     res.clearCookie(REFRESH_COOKIE, { path: '/auth' });
+    return { ok: true };
+  }
+
+  @Get('me')
+  async me(@CurrentUser() current: AuthUser) {
+    return { user: await this.auth.getProfile(current.id) };
+  }
+
+  // Temporary, only here to test role checks. Removed in step 1.5.
+  @Get('admin-ping')
+  @Roles('org_admin')
+  adminPing() {
     return { ok: true };
   }
 

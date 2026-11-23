@@ -139,6 +139,23 @@ export class AuthService {
       .where(eq(refreshTokens.tokenHash, hashToken(rawToken)));
   }
 
+    async getProfile(userId: string) {
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user || !user.isActive) throw new UnauthorizedException();
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId,
+    };
+  }
+  
   private async uniqueSlug(name: string): Promise<string> {
     const base = slugify(name);
     let slug = base;
